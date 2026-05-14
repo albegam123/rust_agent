@@ -1,4 +1,4 @@
-use std::io::{self, BufRead, Write};
+use std::io::{self, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -15,6 +15,9 @@ use ragent_types::event::AgentEvent;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
+
+mod tui_input;
+use tui_input::TuiInput;
 
 #[derive(Parser)]
 #[command(name = "ragent", version, about = "A Rust LLM agent")]
@@ -129,6 +132,106 @@ async fn run_interactive(
     );
     println!();
 
+    // Initialize TUI input handler
+    let mut tui = TuiInput::new();
+
+    // Try to enable TUI mode
+    match tui.enable_raw_mode() {
+        Ok(_) => {
+            let result = run_interactive_tui(&mut tui, agent, context, event_rx).await;
+            let _ = tui.disable_raw_mode();
+            result
+        }
+        Err(e) => {
+            eprintln!("Warning: Failed to enable TUI mode: {}. Falling back to basic mode.", e);
+            run_interactive_basic(agent, context, event_rx).await
+        }
+    }
+}
+
+async fn run_interactive_tui(
+    tui: &mut TuiInput,
+    agent: &Agent,
+    context: &mut Context,
+    mut event_rx: mpsc::UnboundedReceiver<AgentEvent>,
+) -> Result<()> {
+    loop {
+        // Read input with full line editing support
+        match tui.read_line(">>> ") {
+            Ok(Some(input)) => {
+                let input = input.trim();
+                if input.is_empty() {
+                    continue;
+                }
+
+                // Check for commands
+                match input {
+                    "/quit" | "/exit" | "/q" => break,
+                    "/help" | "/h" => {
+                        print_help();
+                        continue;
+                    }
+                    "/clear" => {
+                        context.clear();
+                        tui.clear_history();
+                        println!("conversation cleared.");
+                        continue;
+                    }
+                    "/history" | "/hist" => {
+                        let history = tui.get_history();
+                        if history.is_empty() {
+                            println!("No command history.");
+                        } else {
+                            println!("Command history:");
+                            for (i, cmd) in history.iter().enumerate() {
+                                println!("  {}: {}", i + 1, cmd);
+                            }
+                        }
+                        continue;
+                    }
+                    _ => {}
+                }
+
+                let cancel = CancellationToken::new();
+                let result = agent.run(input, context, cancel).await;
+
+                // Process pending events
+                while let Ok(event) = event_rx.try_recv() {
+                    handle_event(&event);
+                }
+
+                match result {
+                    Ok(Some(content)) => {
+                        println!("\n{content}\n");
+                    }
+                    Ok(None) => {
+                        println!("\n(no response)\n");
+                    }
+                    Err(e) => {
+                        eprintln!("\nerror: {e}\n");
+                    }
+                }
+            }
+            Ok(None) => {
+                // Ctrl+C or Ctrl+D
+                break;
+            }
+            Err(e) => {
+                eprintln!("\nInput error: {e}\n");
+                break;
+            }
+        }
+    }
+
+    println!("goodbye!");
+    Ok(())
+}
+
+async fn run_interactive_basic(
+    agent: &Agent,
+    context: &mut Context,
+    mut event_rx: mpsc::UnboundedReceiver<AgentEvent>,
+) -> Result<()> {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
 
@@ -137,7 +240,7 @@ async fn run_interactive(
         stdout.flush()?;
 
         let mut input = String::new();
-        if stdin.lock().read_line(&mut input)? == 0 {
+        if stdin.read_line(&mut input)? == 0 {
             break;
         }
 
@@ -161,7 +264,6 @@ async fn run_interactive(
         }
 
         let cancel = CancellationToken::new();
-
         let result = agent.run(input, context, cancel).await;
 
         while let Ok(event) = event_rx.try_recv() {
