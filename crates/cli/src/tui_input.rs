@@ -95,14 +95,44 @@ impl TuiInput {
                     }
                     KeyCode::Backspace => {
                         if cursor_pos > 0 {
+                            // Convert character position to byte position
+                            let byte_pos = buffer
+                                .char_indices()
+                                .nth(cursor_pos - 1)
+                                .map(|(pos, _)| pos)
+                                .unwrap_or(0);
+                            
                             cursor_pos -= 1;
-                            buffer.remove(cursor_pos);
+                            
+                            // Calculate byte length of the character to remove
+                            let char_len = if cursor_pos < buffer.chars().count() {
+                                buffer.chars().nth(cursor_pos).map(|c| c.len_utf8()).unwrap_or(1)
+                            } else {
+                                1
+                            };
+                            
+                            buffer.drain(byte_pos..byte_pos + char_len);
                             self.redraw_line(prompt, &buffer, cursor_pos)?;
                         }
                     }
                     KeyCode::Delete => {
-                        if cursor_pos < buffer.len() {
-                            buffer.remove(cursor_pos);
+                        let char_count = buffer.chars().count();
+                        if cursor_pos < char_count {
+                            // Convert character position to byte position
+                            let byte_pos = buffer
+                                .char_indices()
+                                .nth(cursor_pos)
+                                .map(|(pos, _)| pos)
+                                .unwrap_or(buffer.len());
+                            
+                            // Calculate byte length of the character to remove
+                            let char_len = buffer
+                                .chars()
+                                .nth(cursor_pos)
+                                .map(|c| c.len_utf8())
+                                .unwrap_or(1);
+                            
+                            buffer.drain(byte_pos..byte_pos + char_len);
                             self.redraw_line(prompt, &buffer, cursor_pos)?;
                         }
                     }
@@ -113,7 +143,8 @@ impl TuiInput {
                         }
                     }
                     KeyCode::Right => {
-                        if cursor_pos < buffer.len() {
+                        let char_count = buffer.chars().count();
+                        if cursor_pos < char_count {
                             cursor_pos += 1;
                             self.move_cursor_right(1)?;
                         }
@@ -126,9 +157,10 @@ impl TuiInput {
                         }
                     }
                     KeyCode::End => {
-                        if cursor_pos < buffer.len() {
-                            let moves = buffer.len() - cursor_pos;
-                            cursor_pos = buffer.len();
+                        let char_count = buffer.chars().count();
+                        if cursor_pos < char_count {
+                            let moves = char_count - cursor_pos;
+                            cursor_pos = char_count;
                             self.move_cursor_right(moves)?;
                         }
                     }
@@ -141,14 +173,14 @@ impl TuiInput {
                                 let history_item = self.history[new_idx].clone();
                                 self.clear_and_redraw(prompt, &history_item)?;
                                 buffer = history_item;
-                                cursor_pos = buffer.len();
+                                cursor_pos = buffer.chars().count();
                             }
                         } else if !self.history.is_empty() {
                             self.history_index = Some(0);
                             let history_item = self.history[0].clone();
                             self.clear_and_redraw(prompt, &history_item)?;
                             buffer = history_item;
-                            cursor_pos = buffer.len();
+                            cursor_pos = buffer.chars().count();
                         }
                     }
                     KeyCode::Down => {
@@ -165,57 +197,115 @@ impl TuiInput {
                                 let history_item = self.history[new_idx].clone();
                                 self.clear_and_redraw(prompt, &history_item)?;
                                 buffer = history_item;
-                                cursor_pos = buffer.len();
+                                cursor_pos = buffer.chars().count();
                             }
                         }
                     }
                     KeyCode::Tab => {
                         // TODO: Implement tab completion
-                        // For now, just insert spaces
-                        buffer.insert(cursor_pos, ' ');
+                        // For now, just insert spaces (convert char position to byte position)
+                        let byte_pos = buffer
+                            .char_indices()
+                            .nth(cursor_pos)
+                            .map(|(pos, _)| pos)
+                            .unwrap_or(buffer.len());
+                        
+                        buffer.insert(byte_pos, ' ');
                         cursor_pos += 1;
                         self.redraw_line(prompt, &buffer, cursor_pos)?;
                     }
                     KeyCode::Char(c) => {
                         if key.modifiers.contains(KeyModifiers::CONTROL) {
                             // Handle Ctrl+key combinations
+                            let char_count = buffer.chars().count();
                             match c {
                                 'a' => {
                                     cursor_pos = 0;
-                                    self.move_cursor_left(buffer.len())?;
+                                    self.move_cursor_left(char_count)?;
                                 }
                                 'e' => {
-                                    let moves = buffer.len() - cursor_pos;
-                                    cursor_pos = buffer.len();
+                                    let moves = char_count - cursor_pos;
+                                    cursor_pos = char_count;
                                     self.move_cursor_right(moves)?;
                                 }
                                 'k' => {
                                     // Delete from cursor to end
-                                    buffer.truncate(cursor_pos);
+                                    // Convert char position to byte position
+                                    let byte_pos = buffer
+                                        .char_indices()
+                                        .nth(cursor_pos)
+                                        .map(|(pos, _)| pos)
+                                        .unwrap_or(buffer.len());
+                                    buffer.truncate(byte_pos);
                                     self.redraw_line(prompt, &buffer, cursor_pos)?;
                                 }
                                 'u' => {
                                     // Delete from start to cursor
-                                    buffer.drain(..cursor_pos);
+                                    // Convert char position to byte position
+                                    let byte_pos = buffer
+                                        .char_indices()
+                                        .nth(cursor_pos)
+                                        .map(|(pos, _)| pos)
+                                        .unwrap_or(buffer.len());
+                                    buffer.drain(..byte_pos);
                                     cursor_pos = 0;
                                     self.redraw_line(prompt, &buffer, cursor_pos)?;
                                 }
                                 'w' => {
                                     // Delete word before cursor
-                                    let start = buffer[..cursor_pos]
-                                        .trim_end()
-                                        .rfind(|c: char| c.is_whitespace())
-                                        .map(|i| i + 1)
-                                        .unwrap_or(0);
-                                    buffer.drain(start..cursor_pos);
-                                    cursor_pos = start;
+                                    // Find the byte position of the character at cursor_pos
+                                    let cursor_byte = buffer
+                                        .char_indices()
+                                        .nth(cursor_pos)
+                                        .map(|(pos, _)| pos)
+                                        .unwrap_or(buffer.len());
+                                    
+                                    // Find the word boundary (need to search from start)
+                                    let mut word_start_byte = 0;
+                                    let mut current_char_idx = 0;
+                                    
+                                    for (byte_idx, _) in buffer.char_indices() {
+                                        if current_char_idx >= cursor_pos {
+                                            break;
+                                        }
+                                        // Look backwards to find word boundary
+                                        let remaining = &buffer[byte_idx..cursor_byte];
+                                        if let Some(pos) = remaining.trim_end().rfind(|c: char| c.is_whitespace()) {
+                                            word_start_byte = byte_idx + pos + 1;
+                                            break;
+                                        }
+                                        current_char_idx += 1;
+                                    }
+                                    
+                                    // If no word boundary found, delete from start
+                                    if current_char_idx < cursor_pos {
+                                        word_start_byte = 0;
+                                    }
+                                    
+                                    buffer.drain(word_start_byte..cursor_byte);
+                                    cursor_pos = buffer[..word_start_byte].chars().count();
                                     self.redraw_line(prompt, &buffer, cursor_pos)?;
                                 }
                                 _ => {}
                             }
                         } else {
-                            buffer.insert(cursor_pos, c);
-                            cursor_pos += 1;
+                            // Convert character position to byte position
+                            let byte_pos = buffer
+                                .char_indices()
+                                .nth(cursor_pos)
+                                .map(|(pos, _)| pos)
+                                .unwrap_or(buffer.len());
+                            
+                            buffer.insert(byte_pos, c);
+                            // Move cursor after the inserted character
+                            let char_len = c.len_utf8();
+                            cursor_pos += char_len;
+                            
+                            // Ensure cursor_pos doesn't exceed buffer length
+                            if cursor_pos > buffer.chars().count() {
+                                cursor_pos = buffer.chars().count();
+                            }
+                            
                             self.redraw_line(prompt, &buffer, cursor_pos)?;
                         }
                     }
