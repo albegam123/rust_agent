@@ -297,14 +297,8 @@ impl TuiInput {
                                 .unwrap_or(buffer.len());
                             
                             buffer.insert(byte_pos, c);
-                            // Move cursor after the inserted character
-                            let char_len = c.len_utf8();
-                            cursor_pos += char_len;
-                            
-                            // Ensure cursor_pos doesn't exceed buffer length
-                            if cursor_pos > buffer.chars().count() {
-                                cursor_pos = buffer.chars().count();
-                            }
+                            // Move cursor after the inserted character (always +1 char)
+                            cursor_pos += 1;
                             
                             self.redraw_line(prompt, &buffer, cursor_pos)?;
                         }
@@ -336,8 +330,10 @@ impl TuiInput {
         crossterm::execute!(self.stdout, Print(prompt))?;
         crossterm::execute!(self.stdout, Print(buffer))?;
 
-        // Move cursor back to correct position
-        let cursor_col = prompt.len() + cursor_pos;
+        // Calculate cursor position in characters (not bytes)
+        // prompt.chars().count() = prompt characters
+        // cursor_pos = character index in buffer
+        let cursor_col = prompt.chars().count() + cursor_pos;
         crossterm::execute!(self.stdout, crossterm::cursor::MoveToColumn(cursor_col as u16))?;
         self.stdout.flush()?;
 
@@ -351,7 +347,10 @@ impl TuiInput {
         crossterm::execute!(self.stdout, Print(prompt))?;
         crossterm::execute!(self.stdout, Print(buffer))?;
 
-        let cursor_col = prompt.len() + buffer.len();
+        // Calculate cursor position in characters (not bytes)
+        let prompt_chars = prompt.chars().count();
+        let buffer_chars = buffer.chars().count();
+        let cursor_col = prompt_chars + buffer_chars;
         crossterm::execute!(self.stdout, crossterm::cursor::MoveToColumn(cursor_col as u16))?;
         self.stdout.flush()?;
 
