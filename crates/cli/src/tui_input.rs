@@ -139,29 +139,28 @@ impl TuiInput {
                     KeyCode::Left => {
                         if cursor_pos > 0 {
                             cursor_pos -= 1;
-                            self.move_cursor_left(1)?;
+                            // After moving cursor, redraw to show cursor in new position
+                            self.redraw_line(prompt, &buffer, cursor_pos)?;
                         }
                     }
                     KeyCode::Right => {
                         let char_count = buffer.chars().count();
                         if cursor_pos < char_count {
                             cursor_pos += 1;
-                            self.move_cursor_right(1)?;
+                            self.redraw_line(prompt, &buffer, cursor_pos)?;
                         }
                     }
                     KeyCode::Home => {
                         if cursor_pos > 0 {
-                            let moves = cursor_pos;
                             cursor_pos = 0;
-                            self.move_cursor_left(moves)?;
+                            self.redraw_line(prompt, &buffer, cursor_pos)?;
                         }
                     }
                     KeyCode::End => {
                         let char_count = buffer.chars().count();
                         if cursor_pos < char_count {
-                            let moves = char_count - cursor_pos;
                             cursor_pos = char_count;
-                            self.move_cursor_right(moves)?;
+                            self.redraw_line(prompt, &buffer, cursor_pos)?;
                         }
                     }
                     KeyCode::Up => {
@@ -217,16 +216,14 @@ impl TuiInput {
                     KeyCode::Char(c) => {
                         if key.modifiers.contains(KeyModifiers::CONTROL) {
                             // Handle Ctrl+key combinations
-                            let char_count = buffer.chars().count();
                             match c {
                                 'a' => {
                                     cursor_pos = 0;
-                                    self.move_cursor_left(char_count)?;
+                                    self.redraw_line(prompt, &buffer, cursor_pos)?;
                                 }
                                 'e' => {
-                                    let moves = char_count - cursor_pos;
-                                    cursor_pos = char_count;
-                                    self.move_cursor_right(moves)?;
+                                    cursor_pos = buffer.chars().count();
+                                    self.redraw_line(prompt, &buffer, cursor_pos)?;
                                 }
                                 'k' => {
                                     // Delete from cursor to end
@@ -386,25 +383,6 @@ impl TuiInput {
             .take(char_index)
             .map(Self::char_width)
             .sum()
-    }
-
-    fn move_cursor_left(&mut self, n: usize) -> Result<()> {
-        // Get current cursor position and move left
-        if let Ok(pos) = crossterm::cursor::position() {
-            let new_col = pos.0.saturating_sub(n as u16);
-            self.stdout.queue(crossterm::cursor::MoveTo(new_col, pos.1))?;
-            self.stdout.flush()?;
-        }
-        Ok(())
-    }
-
-    fn move_cursor_right(&mut self, n: usize) -> Result<()> {
-        if let Ok(pos) = crossterm::cursor::position() {
-            let new_col = pos.0.saturating_add(n as u16);
-            self.stdout.queue(crossterm::cursor::MoveTo(new_col, pos.1))?;
-            self.stdout.flush()?;
-        }
-        Ok(())
     }
 
     /// Add a command to history manually (e.g., from file)
