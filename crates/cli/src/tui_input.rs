@@ -304,18 +304,8 @@ impl TuiInput {
                         }
                     }
                     KeyCode::Esc => {
-                        // Handle escape sequences for some terminals
-                        if let Event::Key(KeyEvent {
-                            code: KeyCode::Char('3'),
-                            modifiers: _,
-                            ..
-                        }) = event::read()? {
-                            // Delete key sends Esc[3~
-                            if cursor_pos < buffer.len() {
-                                buffer.remove(cursor_pos);
-                                self.redraw_line(prompt, &buffer, cursor_pos)?;
-                            }
-                        }
+                        // Ignore standalone escape key presses
+                        // (Delete key is handled by KeyCode::Delete above)
                     }
                     _ => {}
                 }
