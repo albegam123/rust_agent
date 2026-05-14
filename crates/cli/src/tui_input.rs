@@ -7,6 +7,7 @@ use crossterm::{
 };
 use std::io::{self, Stdin, Stdout, Write};
 use std::collections::VecDeque;
+use std::process::Command;
 
 const MAX_HISTORY: usize = 100;
 
@@ -227,7 +228,6 @@ impl TuiInput {
                                 }
                                 'k' => {
                                     // Delete from cursor to end
-                                    // Convert char position to byte position
                                     let byte_pos = buffer
                                         .char_indices()
                                         .nth(cursor_pos)
@@ -238,7 +238,6 @@ impl TuiInput {
                                 }
                                 'u' => {
                                     // Delete from start to cursor
-                                    // Convert char position to byte position
                                     let byte_pos = buffer
                                         .char_indices()
                                         .nth(cursor_pos)
@@ -250,14 +249,12 @@ impl TuiInput {
                                 }
                                 'w' => {
                                     // Delete word before cursor
-                                    // Find the byte position of the character at cursor_pos
                                     let cursor_byte = buffer
                                         .char_indices()
                                         .nth(cursor_pos)
                                         .map(|(pos, _)| pos)
                                         .unwrap_or(buffer.len());
                                     
-                                    // Find the word boundary (need to search from start)
                                     let mut word_start_byte = 0;
                                     let mut current_char_idx = 0;
                                     
@@ -265,7 +262,6 @@ impl TuiInput {
                                         if current_char_idx >= cursor_pos {
                                             break;
                                         }
-                                        // Look backwards to find word boundary
                                         let remaining = &buffer[byte_idx..cursor_byte];
                                         if let Some(pos) = remaining.trim_end().rfind(|c: char| c.is_whitespace()) {
                                             word_start_byte = byte_idx + pos + 1;
@@ -274,7 +270,6 @@ impl TuiInput {
                                         current_char_idx += 1;
                                     }
                                     
-                                    // If no word boundary found, delete from start
                                     if current_char_idx < cursor_pos {
                                         word_start_byte = 0;
                                     }
@@ -282,6 +277,35 @@ impl TuiInput {
                                     buffer.drain(word_start_byte..cursor_byte);
                                     cursor_pos = buffer[..word_start_byte].chars().count();
                                     self.redraw_line(prompt, &buffer, cursor_pos)?;
+                                }
+                                'v' => {
+                                    // Ctrl+V: Paste from clipboard
+                                    if let Some(text) = self.read_clipboard() {
+                                        // Convert char position to byte position
+                                        let byte_pos = buffer
+                                            .char_indices()
+                                            .nth(cursor_pos)
+                                            .map(|(pos, _)| pos)
+                                            .unwrap_or(buffer.len());
+                                        
+                                        buffer.insert_str(byte_pos, &text);
+                                        cursor_pos += text.chars().count();
+                                        self.redraw_line(prompt, &buffer, cursor_pos)?;
+                                    }
+                                }
+                                'y' => {
+                                    // Ctrl+Y: Redo (alternative for paste)
+                                    if let Some(text) = self.read_clipboard() {
+                                        let byte_pos = buffer
+                                            .char_indices()
+                                            .nth(cursor_pos)
+                                            .map(|(pos, _)| pos)
+                                            .unwrap_or(buffer.len());
+                                        
+                                        buffer.insert_str(byte_pos, &text);
+                                        cursor_pos += text.chars().count();
+                                        self.redraw_line(prompt, &buffer, cursor_pos)?;
+                                    }
                                 }
                                 _ => {}
                             }
@@ -294,7 +318,6 @@ impl TuiInput {
                                 .unwrap_or(buffer.len());
                             
                             buffer.insert(byte_pos, c);
-                            // Move cursor after the inserted character (always +1 char)
                             cursor_pos += 1;
                             
                             self.redraw_line(prompt, &buffer, cursor_pos)?;
@@ -404,6 +427,53 @@ impl TuiInput {
     /// Get history as a vector
     pub fn get_history(&self) -> Vec<String> {
         self.history.iter().cloned().collect()
+    }
+    
+    /// Read text from system clipboard
+    fn read_clipboard(&self) -> Option<String> {
+        #[cfg(target_os = "macos")]
+        {
+            Command::new("pbpaste")
+                .output()
+                .ok()
+                .and_then(|output| String::from_utf8(output.stdout).ok())
+                .map(|s| s.trim_end().to_string())
+        }
+        
+        #[cfg(target_os = "linux")]
+        {
+            // Try xclip first
+            Command::new("xclip")
+                .args(["-selection", "clipboard", "-o"])
+                .output()
+                .ok()
+                .and_then(|output| String::from_utf8(output.stdout).ok())
+                .map(|s| s.trim_end().to_string())
+                .or_else(|| {
+                    // Try xsel as fallback
+                    Command::new("xsel")
+                        .args(["--clipboard", "--output"])
+                        .output()
+                        .ok()
+                        .and_then(|output| String::from_utf8(output.stdout).ok())
+                        .map(|s| s.trim_end().to_string())
+                })
+        }
+        
+        #[cfg(target_os = "windows")]
+        {
+            Command::new("powershell")
+                .args(["-Command", "Get-Clipboard"])
+                .output()
+                .ok()
+                .and_then(|output| String::from_utf8(output.stdout).ok())
+                .map(|s| s.trim_end().to_string())
+        }
+        
+        #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+        {
+            None
+        }
     }
 }
 
