@@ -215,7 +215,26 @@ impl TuiInput {
                         self.redraw_line(prompt, &buffer, cursor_pos)?;
                     }
                     KeyCode::Char(c) => {
-                        if key.modifiers.contains(KeyModifiers::CONTROL) {
+                        // Handle SUPER (Command on macOS, Win on Windows)
+                        if key.modifiers.contains(KeyModifiers::SUPER) {
+                            match c {
+                                'v' | 'V' => {
+                                    // Cmd+V: Paste from clipboard
+                                    if let Some(text) = self.read_clipboard() {
+                                        let byte_pos = buffer
+                                            .char_indices()
+                                            .nth(cursor_pos)
+                                            .map(|(pos, _)| pos)
+                                            .unwrap_or(buffer.len());
+                                        
+                                        buffer.insert_str(byte_pos, &text);
+                                        cursor_pos += text.chars().count();
+                                        self.redraw_line(prompt, &buffer, cursor_pos)?;
+                                    }
+                                }
+                                _ => {}
+                            }
+                        } else if key.modifiers.contains(KeyModifiers::CONTROL) {
                             // Handle Ctrl+key combinations
                             match c {
                                 'a' => {
