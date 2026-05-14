@@ -34,21 +34,15 @@ impl Context {
                 response.content.as_deref().unwrap_or(""),
             ));
         } else {
-            self.messages
-                .push(Message::assistant_with_tool_calls(
-                    response.content.clone(),
-                    response.thinking.clone(),
-                    response.tool_calls.clone(),
-                ));
+            self.messages.push(Message::assistant_with_tool_calls(
+                response.content.clone(),
+                response.thinking.clone(),
+                response.tool_calls.clone(),
+            ));
         }
     }
 
-    pub fn add_tool_result(
-        &mut self,
-        call_id: &str,
-        name: &str,
-        result: &ToolResult,
-    ) {
+    pub fn add_tool_result(&mut self, call_id: &str, name: &str, result: &ToolResult) {
         let output = if result.success {
             result.output.clone()
         } else {
@@ -67,16 +61,14 @@ impl Context {
             .messages
             .iter()
             .map(|m| {
-                let content_len =
-                    m.content.as_ref().map_or(0, String::len);
-                let thinking_len =
-                    m.thinking.as_ref().map_or(0, String::len);
-                let tool_calls_len = m
-                    .tool_calls
-                    .as_ref()
-                    .map_or(0, |calls| {
-                        calls.iter().map(|c| c.function.arguments.len() + c.function.name.len()).sum()
-                    });
+                let content_len = m.content.as_ref().map_or(0, String::len);
+                let thinking_len = m.thinking.as_ref().map_or(0, String::len);
+                let tool_calls_len = m.tool_calls.as_ref().map_or(0, |calls| {
+                    calls
+                        .iter()
+                        .map(|c| c.function.arguments.len() + c.function.name.len())
+                        .sum()
+                });
                 content_len + thinking_len + tool_calls_len
             })
             .sum();
@@ -95,10 +87,7 @@ impl Context {
     pub fn summarize_with(&mut self, summary: &str) -> (usize, usize) {
         let original_count = self.messages.len();
 
-        let last_user_idx = self
-            .messages
-            .iter()
-            .rposition(|m| m.role == Role::User);
+        let last_user_idx = self.messages.iter().rposition(|m| m.role == Role::User);
 
         let mut new_messages = vec![Message::system(&self.system_prompt)];
 

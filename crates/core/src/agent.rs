@@ -35,12 +35,9 @@ impl Agent {
         event_tx: mpsc::UnboundedSender<AgentEvent>,
         session_log: Arc<SessionLog>,
     ) -> Self {
-        let tool_specs: Vec<ToolSpec> =
-            tools.iter().map(|t| t.spec()).collect();
-        let tools: HashMap<String, Box<dyn Tool>> = tools
-            .into_iter()
-            .map(|t| (t.spec().name, t))
-            .collect();
+        let tool_specs: Vec<ToolSpec> = tools.iter().map(|t| t.spec()).collect();
+        let tools: HashMap<String, Box<dyn Tool>> =
+            tools.into_iter().map(|t| (t.spec().name, t)).collect();
 
         Self {
             provider,
@@ -137,8 +134,8 @@ impl Agent {
 
                 let result = self.execute_tool(tool_call).await;
 
-                let args: serde_json::Value =
-                    serde_json::from_str(&tool_call.function.arguments).unwrap_or_else(|_| {
+                let args: serde_json::Value = serde_json::from_str(&tool_call.function.arguments)
+                    .unwrap_or_else(|_| {
                         serde_json::Value::String(tool_call.function.arguments.clone())
                     });
                 self.session_log
@@ -150,11 +147,7 @@ impl Agent {
                     result: result.clone(),
                 });
 
-                context.add_tool_result(
-                    &tool_call.id,
-                    &tool_call.function.name,
-                    &result,
-                );
+                context.add_tool_result(&tool_call.id, &tool_call.function.name, &result);
             }
         }
 
@@ -199,8 +192,7 @@ impl Agent {
             ragent_types::message::Message::user(summary_prompt),
         ];
 
-        self.session_log
-            .log_request(&summary_messages, &[]);
+        self.session_log.log_request(&summary_messages, &[]);
 
         let response = match self.provider.chat(&summary_messages, &[]).await {
             Ok(r) => r,
@@ -254,11 +246,7 @@ mod tests {
 
     #[async_trait::async_trait]
     impl LLMProvider for MockProvider {
-        async fn chat(
-            &self,
-            _messages: &[Message],
-            _tools: &[ToolSpec],
-        ) -> Result<LLMResponse> {
+        async fn chat(&self, _messages: &[Message], _tools: &[ToolSpec]) -> Result<LLMResponse> {
             let mut responses = self.responses.lock().unwrap();
             if responses.is_empty() {
                 anyhow::bail!("no more mock responses");
@@ -324,8 +312,12 @@ mod tests {
         while let Ok(event) = rx.try_recv() {
             events.push(event);
         }
-        assert!(events.iter().any(|e| matches!(e, AgentEvent::TurnStarted { .. })));
-        assert!(events.iter().any(|e| matches!(e, AgentEvent::TurnComplete { .. })));
+        assert!(events
+            .iter()
+            .any(|e| matches!(e, AgentEvent::TurnStarted { .. })));
+        assert!(events
+            .iter()
+            .any(|e| matches!(e, AgentEvent::TurnComplete { .. })));
     }
 
     #[tokio::test]
@@ -379,8 +371,12 @@ mod tests {
         while let Ok(event) = rx.try_recv() {
             events.push(event);
         }
-        assert!(events.iter().any(|e| matches!(e, AgentEvent::ToolCallStart { .. })));
-        assert!(events.iter().any(|e| matches!(e, AgentEvent::ToolCallComplete { .. })));
+        assert!(events
+            .iter()
+            .any(|e| matches!(e, AgentEvent::ToolCallStart { .. })));
+        assert!(events
+            .iter()
+            .any(|e| matches!(e, AgentEvent::ToolCallComplete { .. })));
     }
 
     #[tokio::test]
@@ -447,7 +443,9 @@ mod tests {
         while let Ok(event) = rx.try_recv() {
             events.push(event);
         }
-        let tool_complete = events.iter().find(|e| matches!(e, AgentEvent::ToolCallComplete { .. }));
+        let tool_complete = events
+            .iter()
+            .find(|e| matches!(e, AgentEvent::ToolCallComplete { .. }));
         assert!(tool_complete.is_some());
         if let Some(AgentEvent::ToolCallComplete { result, .. }) = tool_complete {
             assert!(!result.success);

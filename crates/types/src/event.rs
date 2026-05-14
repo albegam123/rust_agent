@@ -65,7 +65,10 @@ mod tests {
             total_steps: 3,
         };
         match event {
-            AgentEvent::TurnComplete { content, total_steps } => {
+            AgentEvent::TurnComplete {
+                content,
+                total_steps,
+            } => {
                 assert_eq!(content.as_deref(), Some("Done!"));
                 assert_eq!(total_steps, 3);
             }

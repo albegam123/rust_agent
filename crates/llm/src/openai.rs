@@ -2,9 +2,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use ragent_traits::llm::LLMProvider;
 use ragent_types::config::RetryConfig;
-use ragent_types::message::{
-    FunctionCall, LLMResponse, Message, Role, ToolCall, Usage,
-};
+use ragent_types::message::{FunctionCall, LLMResponse, Message, Role, ToolCall, Usage};
 use ragent_types::tool::ToolSpec;
 use tracing::debug;
 
@@ -32,11 +30,7 @@ impl OpenAIProvider {
         }
     }
 
-    fn build_request_body(
-        &self,
-        messages: &[Message],
-        tools: &[ToolSpec],
-    ) -> serde_json::Value {
+    fn build_request_body(&self, messages: &[Message], tools: &[ToolSpec]) -> serde_json::Value {
         let api_messages: Vec<serde_json::Value> = messages
             .iter()
             .map(|msg| self.convert_message(msg))
@@ -129,9 +123,7 @@ impl OpenAIProvider {
                         call_type: "function".to_string(),
                         function: FunctionCall {
                             name: tc["function"]["name"].as_str()?.to_string(),
-                            arguments: tc["function"]["arguments"]
-                                .as_str()?
-                                .to_string(),
+                            arguments: tc["function"]["arguments"].as_str()?.to_string(),
                         },
                     })
                 })
@@ -157,11 +149,7 @@ impl OpenAIProvider {
 
 #[async_trait]
 impl LLMProvider for OpenAIProvider {
-    async fn chat(
-        &self,
-        messages: &[Message],
-        tools: &[ToolSpec],
-    ) -> Result<LLMResponse> {
+    async fn chat(&self, messages: &[Message], tools: &[ToolSpec]) -> Result<LLMResponse> {
         let body = self.build_request_body(messages, tools);
         let url = format!("{}/chat/completions", self.api_base);
 
@@ -188,16 +176,14 @@ impl LLMProvider for OpenAIProvider {
                     anyhow::bail!("OpenAI API error ({}): {}", status, response_text);
                 }
 
-                let response_json: serde_json::Value =
-                    serde_json::from_str(&response_text)?;
+                let response_json: serde_json::Value = serde_json::from_str(&response_text)?;
                 Ok(response_json)
             }
         };
 
-        let response_json =
-            crate::retry::with_retry(&self.retry_config, make_request)
-                .await
-                .map_err(|e| anyhow::anyhow!("{e}"))?;
+        let response_json = crate::retry::with_retry(&self.retry_config, make_request)
+            .await
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
 
         self.parse_response(&response_json)
     }
@@ -223,10 +209,7 @@ mod tests {
             "gpt-4o".into(),
             RetryConfig::default(),
         );
-        let messages = vec![
-            Message::system("You are helpful."),
-            Message::user("Hello"),
-        ];
+        let messages = vec![Message::system("You are helpful."), Message::user("Hello")];
         let body = provider.build_request_body(&messages, &[]);
 
         assert_eq!(body["model"], "gpt-4o");

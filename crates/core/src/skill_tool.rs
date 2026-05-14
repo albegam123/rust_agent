@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use serde_json::json;
 use ragent_traits::tool::Tool;
 use ragent_types::tool::{ToolResult, ToolSpec};
+use serde_json::json;
 
 use crate::skill_loader::SkillLoader;
 

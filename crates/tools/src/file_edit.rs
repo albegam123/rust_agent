@@ -46,7 +46,12 @@ impl Tool for FileEditTool {
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("missing required parameter: new_string"))?;
 
-        debug!(path, old_len = old_string.len(), new_len = new_string.len(), "editing file");
+        debug!(
+            path,
+            old_len = old_string.len(),
+            new_len = new_string.len(),
+            "editing file"
+        );
 
         let content = match tokio::fs::read_to_string(path).await {
             Ok(c) => c,
@@ -63,9 +68,7 @@ impl Tool for FileEditTool {
                 let new_content = content.replacen(old_string, new_string, 1);
                 match tokio::fs::write(path, &new_content).await {
                     Ok(()) => Ok(ToolResult::success("edit applied successfully")),
-                    Err(e) => {
-                        Ok(ToolResult::failure(format!("failed to write file: {e}")))
-                    }
+                    Err(e) => Ok(ToolResult::failure(format!("failed to write file: {e}"))),
                 }
             }
             n => Ok(ToolResult::failure(format!(

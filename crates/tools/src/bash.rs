@@ -66,14 +66,14 @@ impl Tool for BashTool {
             .map(Duration::from_secs)
             .unwrap_or(self.timeout);
 
-        debug!(command, timeout_secs = timeout.as_secs(), "executing bash command");
+        debug!(
+            command,
+            timeout_secs = timeout.as_secs(),
+            "executing bash command"
+        );
 
         let result = tokio::time::timeout(timeout, async {
-            Command::new("bash")
-                .arg("-c")
-                .arg(command)
-                .output()
-                .await
+            Command::new("bash").arg("-c").arg(command).output().await
         })
         .await;
 

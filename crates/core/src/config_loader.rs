@@ -65,9 +65,7 @@ pub fn load_system_prompt(path: Option<&Path>) -> Result<String> {
         return Ok(content);
     }
 
-    for candidate in &[
-        PathBuf::from("config/system_prompt.md"),
-    ] {
+    for candidate in &[PathBuf::from("config/system_prompt.md")] {
         if candidate.exists() {
             let content = std::fs::read_to_string(candidate)?;
             return Ok(content);

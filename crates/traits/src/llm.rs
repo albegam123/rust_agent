@@ -8,11 +8,7 @@ use ragent_types::tool::ToolSpec;
 /// Each provider (OpenAI, Anthropic, etc.) implements this trait.
 #[async_trait]
 pub trait LLMProvider: Send + Sync {
-    async fn chat(
-        &self,
-        messages: &[Message],
-        tools: &[ToolSpec],
-    ) -> Result<LLMResponse>;
+    async fn chat(&self, messages: &[Message], tools: &[ToolSpec]) -> Result<LLMResponse>;
 
     fn name(&self) -> &str;
 

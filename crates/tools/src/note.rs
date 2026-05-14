@@ -128,9 +128,7 @@ impl Tool for NoteTool {
                 let matches: Vec<&NoteEntry> = store
                     .notes
                     .iter()
-                    .filter(|n| {
-                        n.key.contains(key) || n.content.contains(key)
-                    })
+                    .filter(|n| n.key.contains(key) || n.content.contains(key))
                     .collect();
 
                 if matches.is_empty() {
@@ -140,9 +138,7 @@ impl Tool for NoteTool {
                 } else {
                     let output: Vec<String> = matches
                         .iter()
-                        .map(|n| {
-                            format!("[{}] {}: {}", n.timestamp, n.key, n.content)
-                        })
+                        .map(|n| format!("[{}] {}: {}", n.timestamp, n.key, n.content))
                         .collect();
                     Ok(ToolResult::success(output.join("\n")))
                 }

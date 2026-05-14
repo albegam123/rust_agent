@@ -78,10 +78,7 @@ impl SessionLog {
             writeln!(f)?;
         }
 
-        let mut state = self
-            .state
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         state.current_file = Some(path.clone());
         state.index = 0;
         Ok(Some(path))
@@ -147,8 +144,7 @@ impl SessionLog {
         if result.success {
             obj["result"] = serde_json::Value::String(result.output.clone());
         } else {
-            obj["error"] =
-                serde_json::Value::String(result.error.clone().unwrap_or_default());
+            obj["error"] = serde_json::Value::String(result.error.clone().unwrap_or_default());
         }
         let json = serde_json::to_string_pretty(&obj).unwrap_or_else(|_| "{}".to_string());
         let content = format!("Tool Execution:\n\n{json}");

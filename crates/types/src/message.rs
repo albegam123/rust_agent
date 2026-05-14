@@ -73,7 +73,11 @@ impl Message {
         }
     }
 
-    pub fn tool_result(call_id: impl Into<String>, name: impl Into<String>, output: impl Into<String>) -> Self {
+    pub fn tool_result(
+        call_id: impl Into<String>,
+        name: impl Into<String>,
+        output: impl Into<String>,
+    ) -> Self {
         Self {
             role: Role::Tool,
             content: Some(output.into()),

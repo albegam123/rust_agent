@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use regex::Regex;
 use ragent_traits::skill::{SkillContent, SkillMetadata};
+use regex::Regex;
 use serde::Deserialize;
 use tracing::{debug, warn};
 
@@ -103,8 +103,9 @@ All files and references in this skill are relative to this directory.\n\n---\n\
 
         match meta {
             Some(metadata) => {
-                let content = std::fs::read_to_string(&metadata.path)
-                    .with_context(|| format!("failed to read skill: {}", metadata.path.display()))?;
+                let content = std::fs::read_to_string(&metadata.path).with_context(|| {
+                    format!("failed to read skill: {}", metadata.path.display())
+                })?;
                 Ok(Some(SkillContent { metadata, content }))
             }
             None => Ok(None),
@@ -186,8 +187,8 @@ fn split_frontmatter(raw: &str) -> Result<(&str, &str)> {
 fn process_skill_paths(content: &str, skill_dir: &Path) -> String {
     let mut out = content.to_string();
 
-    let re_dirs = Regex::new(r"(python\s+|`)((?:scripts|references|assets)/[^\s`\)]+)")
-        .expect("valid regex");
+    let re_dirs =
+        Regex::new(r"(python\s+|`)((?:scripts|references|assets)/[^\s`\)]+)").expect("valid regex");
     out = re_dirs
         .replace_all(&out, |caps: &regex::Captures| {
             let prefix = caps.get(1).map(|m| m.as_str()).unwrap_or("");
@@ -196,7 +197,9 @@ fn process_skill_paths(content: &str, skill_dir: &Path) -> String {
             if abs.exists() {
                 format!("{prefix}{}", abs.display())
             } else {
-                caps.get(0).map(|m| m.as_str().to_string()).unwrap_or_default()
+                caps.get(0)
+                    .map(|m| m.as_str().to_string())
+                    .unwrap_or_default()
             }
         })
         .into_owned();
@@ -217,7 +220,9 @@ fn process_skill_paths(content: &str, skill_dir: &Path) -> String {
                     abs.display()
                 )
             } else {
-                caps.get(0).map(|m| m.as_str().to_string()).unwrap_or_default()
+                caps.get(0)
+                    .map(|m| m.as_str().to_string())
+                    .unwrap_or_default()
             }
         })
         .into_owned();
@@ -228,7 +233,10 @@ fn process_skill_paths(content: &str, skill_dir: &Path) -> String {
     .expect("valid regex");
     out = re_md
         .replace_all(&out, |caps: &regex::Captures| {
-            let prefix = caps.get(1).map(|m| format!("{} ", m.as_str())).unwrap_or_default();
+            let prefix = caps
+                .get(1)
+                .map(|m| format!("{} ", m.as_str()))
+                .unwrap_or_default();
             let link_text = caps.get(2).map(|m| m.as_str()).unwrap_or("");
             let filepath = caps.get(3).map(|m| m.as_str()).unwrap_or("");
             let clean = filepath.strip_prefix("./").unwrap_or(filepath);
@@ -239,7 +247,9 @@ fn process_skill_paths(content: &str, skill_dir: &Path) -> String {
                     abs.display()
                 )
             } else {
-                caps.get(0).map(|m| m.as_str().to_string()).unwrap_or_default()
+                caps.get(0)
+                    .map(|m| m.as_str().to_string())
+                    .unwrap_or_default()
             }
         })
         .into_owned();

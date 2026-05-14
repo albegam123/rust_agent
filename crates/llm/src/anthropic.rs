@@ -23,8 +23,7 @@ impl AnthropicProvider {
     ) -> Self {
         Self {
             api_key,
-            api_base: api_base
-                .unwrap_or_else(|| "https://api.anthropic.com".to_string()),
+            api_base: api_base.unwrap_or_else(|| "https://api.anthropic.com".to_string()),
             model,
             retry_config,
             client: reqwest::Client::new(),
@@ -114,8 +113,7 @@ impl AnthropicProvider {
                     }
 
                     if content_blocks.is_empty() {
-                        content_blocks
-                            .push(serde_json::json!({"type": "text", "text": ""}));
+                        content_blocks.push(serde_json::json!({"type": "text", "text": ""}));
                     }
 
                     api_messages.push(serde_json::json!({
@@ -183,17 +181,14 @@ impl AnthropicProvider {
                     thinking = block["thinking"].as_str().map(String::from);
                 }
                 Some("tool_use") => {
-                    if let (Some(id), Some(name)) =
-                        (block["id"].as_str(), block["name"].as_str())
-                    {
+                    if let (Some(id), Some(name)) = (block["id"].as_str(), block["name"].as_str()) {
                         let input = &block["input"];
                         tool_calls.push(ToolCall {
                             id: id.to_string(),
                             call_type: "function".to_string(),
                             function: FunctionCall {
                                 name: name.to_string(),
-                                arguments: serde_json::to_string(input)
-                                    .unwrap_or_default(),
+                                arguments: serde_json::to_string(input).unwrap_or_default(),
                             },
                         });
                     }
@@ -229,11 +224,7 @@ impl AnthropicProvider {
 
 #[async_trait]
 impl LLMProvider for AnthropicProvider {
-    async fn chat(
-        &self,
-        messages: &[Message],
-        tools: &[ToolSpec],
-    ) -> Result<LLMResponse> {
+    async fn chat(&self, messages: &[Message], tools: &[ToolSpec]) -> Result<LLMResponse> {
         let (_system, body) = self.build_request_body(messages, tools);
         let url = self.messages_url();
 
@@ -267,10 +258,9 @@ impl LLMProvider for AnthropicProvider {
             }
         };
 
-        let response_json =
-            crate::retry::with_retry(&self.retry_config, make_request)
-                .await
-                .map_err(|e| anyhow::anyhow!("{e}"))?;
+        let response_json = crate::retry::with_retry(&self.retry_config, make_request)
+            .await
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
 
         self.parse_response(&response_json)
     }
@@ -313,12 +303,7 @@ mod tests {
             "https://api.minimaxi.com/anthropic/v1/messages"
         );
 
-        let official = AnthropicProvider::new(
-            "k".into(),
-            None,
-            "m".into(),
-            RetryConfig::default(),
-        );
+        let official = AnthropicProvider::new("k".into(), None, "m".into(), RetryConfig::default());
         assert_eq!(
             official.messages_url(),
             "https://api.anthropic.com/v1/messages"

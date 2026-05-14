@@ -104,7 +104,9 @@ mod tests {
     async fn read_file_with_offset_and_limit() {
         let dir = tempfile::tempdir().unwrap();
         let file_path = dir.path().join("test.txt");
-        tokio::fs::write(&file_path, b"a\nb\nc\nd\ne\n").await.unwrap();
+        tokio::fs::write(&file_path, b"a\nb\nc\nd\ne\n")
+            .await
+            .unwrap();
 
         let tool = FileReadTool;
         let result = tool
