@@ -314,16 +314,19 @@ impl TuiInput {
     }
 
     fn redraw_line(&mut self, prompt: &str, buffer: &str, cursor_pos: usize) -> Result<()> {
-        // Move cursor to start of line
+        // Calculate visible width (handles Unicode properly)
+        let prompt_width = Self::visible_width(prompt);
+        let buffer_width = Self::visible_width(buffer);
+        let cursor_col = prompt_width + Self::char_index_to_width(buffer, cursor_pos);
+        
+        // Move cursor to column 0
         crossterm::execute!(self.stdout, crossterm::cursor::MoveToColumn(0))?;
+        // Clear the current line
         crossterm::execute!(self.stdout, Clear(ClearType::CurrentLine))?;
+        // Print prompt and buffer
         crossterm::execute!(self.stdout, Print(prompt))?;
         crossterm::execute!(self.stdout, Print(buffer))?;
-
-        // Calculate cursor position in characters (not bytes)
-        // prompt.chars().count() = prompt characters
-        // cursor_pos = character index in buffer
-        let cursor_col = prompt.chars().count() + cursor_pos;
+        // Move cursor to calculated position
         crossterm::execute!(self.stdout, crossterm::cursor::MoveToColumn(cursor_col as u16))?;
         self.stdout.flush()?;
 
@@ -331,20 +334,58 @@ impl TuiInput {
     }
 
     fn clear_and_redraw(&mut self, prompt: &str, buffer: &str) -> Result<()> {
-        // Clear entire line
+        let prompt_width = Self::visible_width(prompt);
+        let buffer_width = Self::visible_width(buffer);
+        let cursor_col = prompt_width + buffer_width;
+
         crossterm::execute!(self.stdout, crossterm::cursor::MoveToColumn(0))?;
         crossterm::execute!(self.stdout, Clear(ClearType::CurrentLine))?;
         crossterm::execute!(self.stdout, Print(prompt))?;
         crossterm::execute!(self.stdout, Print(buffer))?;
-
-        // Calculate cursor position in characters (not bytes)
-        let prompt_chars = prompt.chars().count();
-        let buffer_chars = buffer.chars().count();
-        let cursor_col = prompt_chars + buffer_chars;
         crossterm::execute!(self.stdout, crossterm::cursor::MoveToColumn(cursor_col as u16))?;
         self.stdout.flush()?;
 
         Ok(())
+    }
+    
+    /// Calculate the visible width of a string (handles Unicode)
+    /// Returns 2 for wide characters (CJK), 1 for others
+    fn visible_width(s: &str) -> usize {
+        s.chars().map(Self::char_width).sum()
+    }
+    
+    /// Calculate the width of a single character
+    /// CJK characters, emojis, etc. typically take 2 columns
+    fn char_width(c: char) -> usize {
+        // Check if character is wide (CJK, emoji, etc.)
+        // Based on East Asian Width property
+        if c as u32 >= 0x1100 && 
+           (c as u32 <= 0x115F ||  // Hangul Jamo
+            c as u32 == 0x2329 ||  // Left-pointing angle bracket
+            c as u32 == 0x232A ||  // Right-pointing angle bracket
+            c as u32 >= 0x2E80 && c as u32 <= 0x303E ||  // CJK Radicals
+            c as u32 >= 0x3040 && c as u32 <= 0xA4CF ||  // Hiragana, Katakana, etc.
+            c as u32 >= 0xAC00 && c as u32 <= 0xD7A3 ||  // Hangul Syllables
+            c as u32 >= 0xF900 && c as u32 <= 0xFAFF ||  // CJK Compatibility Ideographs
+            c as u32 >= 0xFE10 && c as u32 <= 0xFE1F ||  // Vertical forms
+            c as u32 >= 0xFE30 && c as u32 <= 0xFE6F ||  // CJK Compatibility Forms
+            c as u32 >= 0xFF00 && c as u32 <= 0xFF60 ||  // Fullwidth forms
+            c as u32 >= 0xFFE0 && c as u32 <= 0xFFE6 ||  // Fullwidth forms
+            c as u32 >= 0x20000 && c as u32 <= 0x2FFFD ||  // Supplementary
+            c as u32 >= 0x30000 && c as u32 <= 0x3FFFD)  // Supplementary
+        {
+            2
+        } else {
+            1
+        }
+    }
+    
+    /// Calculate the width up to a specific character index
+    fn char_index_to_width(s: &str, char_index: usize) -> usize {
+        s.chars()
+            .take(char_index)
+            .map(Self::char_width)
+            .sum()
     }
 
     fn move_cursor_left(&mut self, n: usize) -> Result<()> {
