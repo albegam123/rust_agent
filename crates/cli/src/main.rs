@@ -128,7 +128,7 @@ async fn run_single(
 async fn run_interactive(
     agent: &Agent,
     context: &mut Context,
-    mut event_rx: mpsc::UnboundedReceiver<AgentEvent>,
+    event_rx: mpsc::UnboundedReceiver<AgentEvent>,
 ) -> Result<()> {
     println!(
         "ragent v{} — type /help for commands, /quit to exit",
@@ -139,12 +139,15 @@ async fn run_interactive(
     // Initialize TUI input handler
     let mut tui = TuiInput::new();
 
-    // Try to enable TUI mode
+    // Try to enable TUI mode once to ensure the terminal supports raw input.
+    // Raw mode is then enabled only while reading a line and disabled before
+    // model/tool output, because normal println!/eprintln! rendering requires
+    // cooked terminal newlines (CRLF behavior). Keeping raw mode during output
+    // causes the diagonal/staircase logs shown in some terminals.
     match tui.enable_raw_mode() {
         Ok(_) => {
-            let result = run_interactive_tui(&mut tui, agent, context, event_rx).await;
             let _ = tui.disable_raw_mode();
-            result
+            run_interactive_tui(&mut tui, agent, context, event_rx).await
         }
         Err(e) => {
             eprintln!(
@@ -163,8 +166,20 @@ async fn run_interactive_tui(
     mut event_rx: mpsc::UnboundedReceiver<AgentEvent>,
 ) -> Result<()> {
     loop {
-        // Read input with full line editing support
-        match tui.read_line(">>> ") {
+        // Enable raw mode only for line editing. Disable it immediately before
+        // rendering commands, model/tool events, and assistant panels.
+        if let Err(e) = tui.enable_raw_mode() {
+            eprintln!(
+                "Warning: Failed to re-enable TUI mode: {}. Falling back to basic mode.",
+                e
+            );
+            return run_interactive_basic(agent, context, event_rx).await;
+        }
+
+        let line = tui.read_line(">>> ");
+        let _ = tui.disable_raw_mode();
+
+        match line {
             Ok(Some(input)) => {
                 let input = input.trim();
                 if input.is_empty() {
