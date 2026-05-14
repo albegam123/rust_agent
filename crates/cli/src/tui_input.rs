@@ -1,19 +1,18 @@
 use anyhow::Result;
 use crossterm::{
-    event::{self, DisableBracketedPaste, EnableBracketedPaste, Event, KeyCode, KeyEvent, KeyModifiers},
+    event::{self, DisableBracketedPaste, EnableBracketedPaste, Event, KeyCode, KeyModifiers},
     style::Print,
-    terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{Clear, ClearType},
     QueueableCommand,
 };
-use std::io::{self, Stdin, Stdout, Write};
 use std::collections::VecDeque;
+use std::io::{self, Stdout, Write};
 use std::process::Command;
 
 const MAX_HISTORY: usize = 100;
 
 pub struct TuiInput {
     stdout: Stdout,
-    stdin: Stdin,
     history: VecDeque<String>,
     history_index: Option<usize>,
 }
@@ -22,7 +21,6 @@ impl TuiInput {
     pub fn new() -> Self {
         Self {
             stdout: io::stdout(),
-            stdin: io::stdin(),
             history: VecDeque::new(),
             history_index: None,
         }
@@ -30,26 +28,27 @@ impl TuiInput {
 
     /// Initialize terminal for TUI mode
     pub fn enable_raw_mode(&mut self) -> Result<()> {
-        use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
-        
-        // Enable raw mode directly
+        use crossterm::terminal::enable_raw_mode;
+
+        // Enable raw mode directly. Do not enter the alternate screen for a REPL:
+        // staying on the main screen keeps normal terminal scrollback selection/copy working.
         enable_raw_mode()?;
-        
-        // Enter alternate screen
-        crossterm::execute!(self.stdout, EnterAlternateScreen)?;
-        
-        // Enable bracketed paste mode
+
+        // Enable bracketed paste mode. Crossterm will then emit Event::Paste(String)
+        // instead of a burst of Key events for terminal paste operations.
         crossterm::execute!(self.stdout, EnableBracketedPaste)?;
-        
+
         self.stdout.flush()?;
         Ok(())
     }
 
     /// Disable raw mode and restore terminal
     pub fn disable_raw_mode(&mut self) -> Result<()> {
-        use crossterm::terminal::{disable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
-        
-        crossterm::execute!(self.stdout, LeaveAlternateScreen)?;
+        use crossterm::terminal::disable_raw_mode;
+
+        // Disable bracketed paste before leaving raw mode so the terminal is restored
+        // even if the process continues after TUI input exits.
+        crossterm::execute!(self.stdout, DisableBracketedPaste)?;
         disable_raw_mode()?;
         self.stdout.flush()?;
         Ok(())
@@ -64,9 +63,9 @@ impl TuiInput {
         let mut cursor_pos = 0;
 
         loop {
-            // Wait for next event with timeout
-            if let Event::Key(key) = event::read()? {
-                match key.code {
+            // Wait for next terminal event.
+            match event::read()? {
+                Event::Key(key) => match key.code {
                     KeyCode::Enter => {
                         // Submit input
                         crossterm::execute!(self.stdout, Print("\r\n"))?;
@@ -102,16 +101,20 @@ impl TuiInput {
                                 .nth(cursor_pos - 1)
                                 .map(|(pos, _)| pos)
                                 .unwrap_or(0);
-                            
+
                             cursor_pos -= 1;
-                            
+
                             // Calculate byte length of the character to remove
                             let char_len = if cursor_pos < buffer.chars().count() {
-                                buffer.chars().nth(cursor_pos).map(|c| c.len_utf8()).unwrap_or(1)
+                                buffer
+                                    .chars()
+                                    .nth(cursor_pos)
+                                    .map(|c| c.len_utf8())
+                                    .unwrap_or(1)
                             } else {
                                 1
                             };
-                            
+
                             buffer.drain(byte_pos..byte_pos + char_len);
                             self.redraw_line(prompt, &buffer, cursor_pos)?;
                         }
@@ -125,14 +128,14 @@ impl TuiInput {
                                 .nth(cursor_pos)
                                 .map(|(pos, _)| pos)
                                 .unwrap_or(buffer.len());
-                            
+
                             // Calculate byte length of the character to remove
                             let char_len = buffer
                                 .chars()
                                 .nth(cursor_pos)
                                 .map(|c| c.len_utf8())
                                 .unwrap_or(1);
-                            
+
                             buffer.drain(byte_pos..byte_pos + char_len);
                             self.redraw_line(prompt, &buffer, cursor_pos)?;
                         }
@@ -209,7 +212,7 @@ impl TuiInput {
                             .nth(cursor_pos)
                             .map(|(pos, _)| pos)
                             .unwrap_or(buffer.len());
-                        
+
                         buffer.insert(byte_pos, ' ');
                         cursor_pos += 1;
                         self.redraw_line(prompt, &buffer, cursor_pos)?;
@@ -219,16 +222,12 @@ impl TuiInput {
                         if key.modifiers.contains(KeyModifiers::SUPER) {
                             match c {
                                 'v' | 'V' => {
-                                    // Cmd+V: Paste from clipboard
+                                    // Cmd+V: Paste from clipboard. Some terminals also deliver
+                                    // normal paste as Event::Paste below; this branch is only for
+                                    // terminals that pass the Command/Super modifier through.
                                     if let Some(text) = self.read_clipboard() {
-                                        let byte_pos = buffer
-                                            .char_indices()
-                                            .nth(cursor_pos)
-                                            .map(|(pos, _)| pos)
-                                            .unwrap_or(buffer.len());
-                                        
-                                        buffer.insert_str(byte_pos, &text);
-                                        cursor_pos += text.chars().count();
+                                        cursor_pos =
+                                            Self::insert_paste_text(&mut buffer, cursor_pos, &text);
                                         self.redraw_line(prompt, &buffer, cursor_pos)?;
                                     }
                                 }
@@ -273,56 +272,46 @@ impl TuiInput {
                                         .nth(cursor_pos)
                                         .map(|(pos, _)| pos)
                                         .unwrap_or(buffer.len());
-                                    
+
                                     let mut word_start_byte = 0;
                                     let mut current_char_idx = 0;
-                                    
+
                                     for (byte_idx, _) in buffer.char_indices() {
                                         if current_char_idx >= cursor_pos {
                                             break;
                                         }
                                         let remaining = &buffer[byte_idx..cursor_byte];
-                                        if let Some(pos) = remaining.trim_end().rfind(|c: char| c.is_whitespace()) {
+                                        if let Some(pos) =
+                                            remaining.trim_end().rfind(|c: char| c.is_whitespace())
+                                        {
                                             word_start_byte = byte_idx + pos + 1;
                                             break;
                                         }
                                         current_char_idx += 1;
                                     }
-                                    
+
                                     if current_char_idx < cursor_pos {
                                         word_start_byte = 0;
                                     }
-                                    
+
                                     buffer.drain(word_start_byte..cursor_byte);
                                     cursor_pos = buffer[..word_start_byte].chars().count();
                                     self.redraw_line(prompt, &buffer, cursor_pos)?;
                                 }
                                 'v' => {
-                                    // Ctrl+V: Paste from clipboard
+                                    // Ctrl+V: Paste from clipboard. In many terminals Ctrl+V is
+                                    // literal-next rather than paste, but keep this as a useful fallback.
                                     if let Some(text) = self.read_clipboard() {
-                                        // Convert char position to byte position
-                                        let byte_pos = buffer
-                                            .char_indices()
-                                            .nth(cursor_pos)
-                                            .map(|(pos, _)| pos)
-                                            .unwrap_or(buffer.len());
-                                        
-                                        buffer.insert_str(byte_pos, &text);
-                                        cursor_pos += text.chars().count();
+                                        cursor_pos =
+                                            Self::insert_paste_text(&mut buffer, cursor_pos, &text);
                                         self.redraw_line(prompt, &buffer, cursor_pos)?;
                                     }
                                 }
                                 'y' => {
-                                    // Ctrl+Y: Redo (alternative for paste)
+                                    // Ctrl+Y: Paste/yank fallback.
                                     if let Some(text) = self.read_clipboard() {
-                                        let byte_pos = buffer
-                                            .char_indices()
-                                            .nth(cursor_pos)
-                                            .map(|(pos, _)| pos)
-                                            .unwrap_or(buffer.len());
-                                        
-                                        buffer.insert_str(byte_pos, &text);
-                                        cursor_pos += text.chars().count();
+                                        cursor_pos =
+                                            Self::insert_paste_text(&mut buffer, cursor_pos, &text);
                                         self.redraw_line(prompt, &buffer, cursor_pos)?;
                                     }
                                 }
@@ -335,10 +324,10 @@ impl TuiInput {
                                 .nth(cursor_pos)
                                 .map(|(pos, _)| pos)
                                 .unwrap_or(buffer.len());
-                            
+
                             buffer.insert(byte_pos, c);
                             cursor_pos += 1;
-                            
+
                             self.redraw_line(prompt, &buffer, cursor_pos)?;
                         }
                     }
@@ -347,7 +336,14 @@ impl TuiInput {
                         // (Delete key is handled by KeyCode::Delete above)
                     }
                     _ => {}
+                },
+                Event::Paste(text) => {
+                    // Bracketed paste is the reliable way terminal paste is reported in raw mode.
+                    // Without this branch, Cmd+V / Ctrl+Shift+V / right-click paste appeared broken.
+                    cursor_pos = Self::insert_paste_text(&mut buffer, cursor_pos, &text);
+                    self.redraw_line(prompt, &buffer, cursor_pos)?;
                 }
+                _ => {}
             }
         }
     }
@@ -355,9 +351,8 @@ impl TuiInput {
     fn redraw_line(&mut self, prompt: &str, buffer: &str, cursor_pos: usize) -> Result<()> {
         // Calculate visible width (handles Unicode properly)
         let prompt_width = Self::visible_width(prompt);
-        let buffer_width = Self::visible_width(buffer);
         let cursor_col = prompt_width + Self::char_index_to_width(buffer, cursor_pos);
-        
+
         // Move cursor to column 0
         crossterm::execute!(self.stdout, crossterm::cursor::MoveToColumn(0))?;
         // Clear the current line
@@ -366,7 +361,10 @@ impl TuiInput {
         crossterm::execute!(self.stdout, Print(prompt))?;
         crossterm::execute!(self.stdout, Print(buffer))?;
         // Move cursor to calculated position
-        crossterm::execute!(self.stdout, crossterm::cursor::MoveToColumn(cursor_col as u16))?;
+        crossterm::execute!(
+            self.stdout,
+            crossterm::cursor::MoveToColumn(cursor_col as u16)
+        )?;
         self.stdout.flush()?;
 
         Ok(())
@@ -381,25 +379,28 @@ impl TuiInput {
         crossterm::execute!(self.stdout, Clear(ClearType::CurrentLine))?;
         crossterm::execute!(self.stdout, Print(prompt))?;
         crossterm::execute!(self.stdout, Print(buffer))?;
-        crossterm::execute!(self.stdout, crossterm::cursor::MoveToColumn(cursor_col as u16))?;
+        crossterm::execute!(
+            self.stdout,
+            crossterm::cursor::MoveToColumn(cursor_col as u16)
+        )?;
         self.stdout.flush()?;
 
         Ok(())
     }
-    
+
     /// Calculate the visible width of a string (handles Unicode)
     /// Returns 2 for wide characters (CJK), 1 for others
     fn visible_width(s: &str) -> usize {
         s.chars().map(Self::char_width).sum()
     }
-    
+
     /// Calculate the width of a single character
     /// CJK characters, emojis, etc. typically take 2 columns
     fn char_width(c: char) -> usize {
         // Check if character is wide (CJK, emoji, etc.)
         // Based on East Asian Width property
-        if c as u32 >= 0x1100 && 
-           (c as u32 <= 0x115F ||  // Hangul Jamo
+        if c as u32 >= 0x1100
+            && (c as u32 <= 0x115F ||  // Hangul Jamo
             c as u32 == 0x2329 ||  // Left-pointing angle bracket
             c as u32 == 0x232A ||  // Right-pointing angle bracket
             c as u32 >= 0x2E80 && c as u32 <= 0x303E ||  // CJK Radicals
@@ -411,20 +412,49 @@ impl TuiInput {
             c as u32 >= 0xFF00 && c as u32 <= 0xFF60 ||  // Fullwidth forms
             c as u32 >= 0xFFE0 && c as u32 <= 0xFFE6 ||  // Fullwidth forms
             c as u32 >= 0x20000 && c as u32 <= 0x2FFFD ||  // Supplementary
-            c as u32 >= 0x30000 && c as u32 <= 0x3FFFD)  // Supplementary
+            c as u32 >= 0x30000 && c as u32 <= 0x3FFFD)
+        // Supplementary
         {
             2
         } else {
             1
         }
     }
-    
+
     /// Calculate the width up to a specific character index
     fn char_index_to_width(s: &str, char_index: usize) -> usize {
-        s.chars()
-            .take(char_index)
-            .map(Self::char_width)
-            .sum()
+        s.chars().take(char_index).map(Self::char_width).sum()
+    }
+
+    fn char_to_byte_index(s: &str, char_index: usize) -> usize {
+        s.char_indices()
+            .nth(char_index)
+            .map(|(pos, _)| pos)
+            .unwrap_or(s.len())
+    }
+
+    fn normalize_paste_text(text: &str) -> String {
+        // A single-line REPL cannot represent embedded terminal newlines safely.
+        // Normalize CRLF/CR/LF to spaces so pasted multi-line text remains editable
+        // and does not accidentally submit partial commands.
+        text.replace("\r\n", "\n")
+            .replace('\r', "\n")
+            .lines()
+            .map(str::trim_end)
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    fn insert_paste_text(buffer: &mut String, cursor_pos: usize, text: &str) -> usize {
+        let text = Self::normalize_paste_text(text);
+        if text.is_empty() {
+            return cursor_pos;
+        }
+
+        let byte_pos = Self::char_to_byte_index(buffer, cursor_pos);
+        let pasted_chars = text.chars().count();
+        buffer.insert_str(byte_pos, &text);
+        cursor_pos + pasted_chars
     }
 
     /// Add a command to history manually (e.g., from file)
@@ -447,7 +477,7 @@ impl TuiInput {
     pub fn get_history(&self) -> Vec<String> {
         self.history.iter().cloned().collect()
     }
-    
+
     /// Read text from system clipboard
     fn read_clipboard(&self) -> Option<String> {
         #[cfg(target_os = "macos")]
@@ -458,7 +488,7 @@ impl TuiInput {
                 .and_then(|output| String::from_utf8(output.stdout).ok())
                 .map(|s| s.trim_end().to_string())
         }
-        
+
         #[cfg(target_os = "linux")]
         {
             // Try xclip first
@@ -478,7 +508,7 @@ impl TuiInput {
                         .map(|s| s.trim_end().to_string())
                 })
         }
-        
+
         #[cfg(target_os = "windows")]
         {
             Command::new("powershell")
@@ -488,7 +518,7 @@ impl TuiInput {
                 .and_then(|output| String::from_utf8(output.stdout).ok())
                 .map(|s| s.trim_end().to_string())
         }
-        
+
         #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
         {
             None

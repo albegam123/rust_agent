@@ -17,6 +17,10 @@ use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 mod tui_input;
+use crossterm::{
+    style::{Color, ResetColor, SetForegroundColor},
+    terminal,
+};
 use tui_input::TuiInput;
 
 #[derive(Parser)]
@@ -114,7 +118,7 @@ async fn run_single(
     let result = agent.run(prompt, context, cancel).await?;
 
     if let Some(content) = result {
-        println!("\n{content}");
+        print_assistant_response(&content);
     }
 
     event_handle.abort();
@@ -143,7 +147,10 @@ async fn run_interactive(
             result
         }
         Err(e) => {
-            eprintln!("Warning: Failed to enable TUI mode: {}. Falling back to basic mode.", e);
+            eprintln!(
+                "Warning: Failed to enable TUI mode: {}. Falling back to basic mode.",
+                e
+            );
             run_interactive_basic(agent, context, event_rx).await
         }
     }
@@ -202,13 +209,13 @@ async fn run_interactive_tui(
 
                 match result {
                     Ok(Some(content)) => {
-                        println!("\n{content}\n");
+                        print_assistant_response(&content);
                     }
                     Ok(None) => {
-                        println!("\n(no response)\n");
+                        print_info_panel("no response", "The model returned no final text.");
                     }
                     Err(e) => {
-                        eprintln!("\nerror: {e}\n");
+                        print_error_panel(&format!("{e}"));
                     }
                 }
             }
@@ -272,13 +279,13 @@ async fn run_interactive_basic(
 
         match result {
             Ok(Some(content)) => {
-                println!("\n{content}\n");
+                print_assistant_response(&content);
             }
             Ok(None) => {
-                println!("\n(no response)\n");
+                print_info_panel("no response", "The model returned no final text.");
             }
             Err(e) => {
-                eprintln!("\nerror: {e}\n");
+                print_error_panel(&format!("{e}"));
             }
         }
     }
@@ -297,36 +304,176 @@ fn handle_event(event: &AgentEvent) {
     match event {
         AgentEvent::TurnStarted { step } => {
             if *step > 0 {
-                eprintln!("  [step {}]", step + 1);
+                print_event_line("↻", Color::DarkGrey, &format!("step {}", step + 1));
             }
         }
         AgentEvent::Thinking { content } => {
-            eprintln!("  💭 {}", truncate(content, 80));
+            print_event_line("💭", Color::Magenta, truncate(content, 80));
         }
         AgentEvent::ToolCallStart { name, .. } => {
-            eprint!("  🔧 {name}...");
+            print_event_line("🔧", Color::Cyan, &format!("running tool: {name}"));
         }
         AgentEvent::ToolCallComplete { name, result, .. } => {
             if result.success {
-                eprintln!(" ✓");
+                print_event_line("✓", Color::Green, &format!("tool complete: {name}"));
             } else {
-                eprintln!(" ✗ {}", result.error.as_deref().unwrap_or("error"));
+                print_event_line(
+                    "✗",
+                    Color::Red,
+                    &format!(
+                        "tool failed: {name}: {}",
+                        result.error.as_deref().unwrap_or("error")
+                    ),
+                );
             }
-            let _ = name;
         }
         AgentEvent::ContextSummarized {
             original_messages,
             new_messages,
         } => {
-            eprintln!("  📝 context summarized: {original_messages} → {new_messages} messages");
+            print_event_line(
+                "📝",
+                Color::Yellow,
+                &format!("context summarized: {original_messages} → {new_messages} messages"),
+            );
         }
         AgentEvent::Error { message } => {
-            eprintln!("  ❌ {message}");
+            print_event_line("❌", Color::Red, message);
         }
         AgentEvent::Cancelled => {
-            eprintln!("  ⛔ cancelled");
+            print_event_line("⛔", Color::Red, "cancelled");
         }
         AgentEvent::TurnComplete { .. } | AgentEvent::Response { .. } => {}
+    }
+}
+
+fn print_assistant_response(content: &str) {
+    print_panel("assistant", "✦", Color::Cyan, content);
+}
+
+fn print_error_panel(message: &str) {
+    print_panel("error", "!", Color::Red, message);
+}
+
+fn print_info_panel(title: &str, message: &str) {
+    print_panel(title, "·", Color::DarkGrey, message);
+}
+
+fn print_event_line(icon: &str, color: Color, message: &str) {
+    eprintln!(
+        "{}{}{} {}{}{}",
+        SetForegroundColor(color),
+        icon,
+        ResetColor,
+        SetForegroundColor(Color::DarkGrey),
+        message,
+        ResetColor
+    );
+}
+
+fn print_panel(title: &str, icon: &str, color: Color, content: &str) {
+    let width = panel_width();
+    let inner_width = width.saturating_sub(4);
+    let title_text = format!(" {icon} {title} ");
+    let title_width = display_width(&title_text);
+    let remaining = inner_width.saturating_sub(title_width);
+
+    println!();
+    println!(
+        "{}╭{}{}{}╮{}",
+        SetForegroundColor(color),
+        title_text,
+        "─".repeat(remaining),
+        ResetColor,
+        ResetColor
+    );
+
+    for raw_line in content.lines() {
+        if raw_line.is_empty() {
+            print_panel_line("", inner_width, color);
+            continue;
+        }
+        for line in wrap_line(raw_line, inner_width) {
+            print_panel_line(&line, inner_width, color);
+        }
+    }
+
+    println!(
+        "{}╰{}╯{}\n",
+        SetForegroundColor(color),
+        "─".repeat(inner_width),
+        ResetColor
+    );
+}
+
+fn print_panel_line(line: &str, inner_width: usize, color: Color) {
+    let padding = inner_width.saturating_sub(display_width(line));
+    println!(
+        "{}│{} {}{} │{}",
+        SetForegroundColor(color),
+        ResetColor,
+        line,
+        " ".repeat(padding),
+        ResetColor
+    );
+}
+
+fn panel_width() -> usize {
+    terminal::size()
+        .map(|(cols, _)| cols as usize)
+        .unwrap_or(88)
+        .clamp(48, 100)
+}
+
+fn wrap_line(line: &str, max_width: usize) -> Vec<String> {
+    if max_width == 0 {
+        return vec![String::new()];
+    }
+
+    let mut lines = Vec::new();
+    let mut current = String::new();
+    let mut current_width = 0;
+
+    for ch in line.chars() {
+        let ch_width = char_display_width(ch);
+        if current_width > 0 && current_width + ch_width > max_width {
+            lines.push(current);
+            current = String::new();
+            current_width = 0;
+        }
+        current.push(ch);
+        current_width += ch_width;
+    }
+
+    if !current.is_empty() || lines.is_empty() {
+        lines.push(current);
+    }
+    lines
+}
+
+fn display_width(s: &str) -> usize {
+    s.chars().map(char_display_width).sum()
+}
+
+fn char_display_width(c: char) -> usize {
+    if c as u32 >= 0x1100
+        && (c as u32 <= 0x115F
+            || c as u32 == 0x2329
+            || c as u32 == 0x232A
+            || c as u32 >= 0x2E80 && c as u32 <= 0x303E
+            || c as u32 >= 0x3040 && c as u32 <= 0xA4CF
+            || c as u32 >= 0xAC00 && c as u32 <= 0xD7A3
+            || c as u32 >= 0xF900 && c as u32 <= 0xFAFF
+            || c as u32 >= 0xFE10 && c as u32 <= 0xFE1F
+            || c as u32 >= 0xFE30 && c as u32 <= 0xFE6F
+            || c as u32 >= 0xFF00 && c as u32 <= 0xFF60
+            || c as u32 >= 0xFFE0 && c as u32 <= 0xFFE6
+            || c as u32 >= 0x20000 && c as u32 <= 0x2FFFD
+            || c as u32 >= 0x30000 && c as u32 <= 0x3FFFD)
+    {
+        2
+    } else {
+        1
     }
 }
 
