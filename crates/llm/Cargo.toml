@@ -1,0 +1,21 @@
+[package]
+name = "ragent-llm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "LLM provider implementations for ragent: OpenAI, Anthropic"
+
+[dependencies]
+ragent-types = { workspace = true }
+ragent-traits = { workspace = true }
+async-trait = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+reqwest = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

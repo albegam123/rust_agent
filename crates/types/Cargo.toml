@@ -1,0 +1,15 @@
+[package]
+name = "ragent-types"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Core data types for ragent: messages, tools, config, events"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+toml = { workspace = true }

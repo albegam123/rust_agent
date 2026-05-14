@@ -1,0 +1,34 @@
+[llm]
+# api_key = "sk-xxx"              # or set RAGENT_API_KEY env var
+# OpenAI: api_base = "https://api.openai.com/v1"
+# Anthropic / MiniMax-compatible: use full root, e.g.
+#   https://api.anthropic.com
+#   https://api.minimaxi.com/anthropic   (or origin-only https://api.minimaxi.com — ragent appends /anthropic)
+model = "gpt-4o"
+provider = "openai"               # "openai" or "anthropic"
+
+[llm.retry]
+enabled = true
+max_retries = 3
+initial_delay_ms = 1000
+max_delay_ms = 30000
+
+[agent]
+max_steps = 50
+max_context_tokens = 100000
+# system_prompt_path = "config/system_prompt.md"
+# workspace_dir = "."
+
+[tools]
+enable_file_tools = true
+enable_bash = true
+enable_note = true
+
+[skills]
+enabled = false
+# skills_dir = "./skills"          # default ./skills under cwd when enabled; use {SKILLS_METADATA} in system prompt
+
+[logging]
+level = "info"
+# session_log = true              # one file per chat turn under log_dir (LLM I/O + tool results)
+# log_dir = "./logs"              # default: ~/.ragent/log

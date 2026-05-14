@@ -1,0 +1,25 @@
+[package]
+name = "ragent-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "CLI entry point for ragent"
+
+[[bin]]
+name = "ragent"
+path = "src/main.rs"
+
+[dependencies]
+ragent-types = { workspace = true }
+ragent-traits = { workspace = true }
+ragent-core = { workspace = true }
+ragent-llm = { workspace = true }
+ragent-tools = { workspace = true }
+anyhow = { workspace = true }
+clap = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tokio-util = { workspace = true }
+ratatui = { workspace = true }
+crossterm = { workspace = true }

@@ -1,0 +1,21 @@
+[package]
+name = "ragent-tools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Tool implementations for ragent: bash, file ops, notes"
+
+[dependencies]
+ragent-types = { workspace = true }
+ragent-traits = { workspace = true }
+async-trait = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+tempfile = "3"

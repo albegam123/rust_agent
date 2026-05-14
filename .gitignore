@@ -1,0 +1,23 @@
+# Build results
+/target
+debug/
+release/
+*.pdb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backup files
+**/*.rs.bk
+
+# Environment
+.env
+config/config.toml
