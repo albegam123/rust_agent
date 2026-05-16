@@ -59,6 +59,12 @@ async fn main() -> Result<()> {
 
     let provider = ragent_llm::create_provider(&config.llm)?;
     let mut tools = ragent_tools::create_tools(&config.tools);
+    if config.tools.enable_mcp {
+        match ragent_tools::mcp::load_mcp_tools(&config.tools).await {
+            Ok(mcp_tools) => tools.extend(mcp_tools),
+            Err(error) => warn!("failed to load MCP tools: {error:#}"),
+        }
+    }
     let mut system_prompt =
         config_loader::load_system_prompt(config.agent.system_prompt_path.as_deref())?;
 

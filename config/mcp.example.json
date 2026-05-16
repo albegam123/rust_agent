@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "example": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
+      "env": {},
+      "disabled": true,
+      "connect_timeout_secs": 10,
+      "execute_timeout_secs": 60
+    }
+  }
+}

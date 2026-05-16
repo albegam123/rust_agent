@@ -23,6 +23,12 @@ max_context_tokens = 100000
 enable_file_tools = true
 enable_bash = true
 enable_note = true
+enable_mcp = false
+# mcp_config_path = "config/mcp.json"
+
+[tools.mcp]
+connect_timeout_secs = 10
+execute_timeout_secs = 60
 
 [skills]
 enabled = false

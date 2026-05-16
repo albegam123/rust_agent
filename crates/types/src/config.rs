@@ -75,6 +75,9 @@ pub struct ToolsConfig {
     pub enable_file_tools: bool,
     pub enable_bash: bool,
     pub enable_note: bool,
+    pub enable_mcp: bool,
+    pub mcp_config_path: Option<PathBuf>,
+    pub mcp: McpConfig,
 }
 
 impl Default for ToolsConfig {
@@ -83,6 +86,25 @@ impl Default for ToolsConfig {
             enable_file_tools: true,
             enable_bash: true,
             enable_note: true,
+            enable_mcp: false,
+            mcp_config_path: None,
+            mcp: McpConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct McpConfig {
+    pub connect_timeout_secs: u64,
+    pub execute_timeout_secs: u64,
+}
+
+impl Default for McpConfig {
+    fn default() -> Self {
+        Self {
+            connect_timeout_secs: 10,
+            execute_timeout_secs: 60,
         }
     }
 }
