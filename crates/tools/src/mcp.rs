@@ -200,11 +200,11 @@ impl McpTool {
 #[async_trait]
 impl Tool for McpTool {
     fn spec(&self) -> ToolSpec {
-        ToolSpec {
-            name: self.exposed_name.clone(),
-            description: self.description.clone(),
-            parameters: self.parameters.clone(),
-        }
+        ToolSpec::function(
+            self.exposed_name.clone(),
+            self.description.clone(),
+            self.parameters.clone(),
+        )
     }
 
     async fn call(&self, args: Value) -> Result<ToolResult> {
@@ -577,7 +577,10 @@ for line in sys.stdin:
 
         let tools = load_mcp_tools(&config).await.unwrap();
         assert_eq!(tools.len(), 1);
-        assert_eq!(tools[0].spec().name, "mcp__fake-server__echo");
+        assert_eq!(
+            tools[0].spec().callable_name().unwrap(),
+            "mcp__fake-server__echo"
+        );
         let result = tools[0]
             .call(serde_json::json!({"value": "hello"}))
             .await

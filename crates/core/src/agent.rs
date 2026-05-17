@@ -31,13 +31,27 @@ impl Agent {
     pub fn new(
         provider: Box<dyn LLMProvider>,
         tools: Vec<Box<dyn Tool>>,
+        hosted_tool_specs: Vec<ToolSpec>,
         config: AgentLoopConfig,
         event_tx: mpsc::UnboundedSender<AgentEvent>,
         session_log: Arc<SessionLog>,
     ) -> Self {
-        let tool_specs: Vec<ToolSpec> = tools.iter().map(|t| t.spec()).collect();
+        let mut tool_specs: Vec<ToolSpec> = tools.iter().map(|t| t.spec()).collect();
+        tool_specs.extend(hosted_tool_specs);
         let tools: HashMap<String, Box<dyn Tool>> =
-            tools.into_iter().map(|t| (t.spec().name, t)).collect();
+            tools
+                .into_iter()
+                .map(|t| {
+                    let key = t
+                        .spec()
+                        .callable_name()
+                        .expect(
+                            "`ToolSpec::callable_name()` must identify executable tools — pass hosted tools via hosted_tool_specs",
+                        )
+                        .to_string();
+                    (key, t)
+                })
+                .collect();
 
         Self {
             provider,
@@ -270,11 +284,11 @@ mod tests {
     #[async_trait::async_trait]
     impl Tool for CounterTool {
         fn spec(&self) -> ToolSpec {
-            ToolSpec {
-                name: "counter".into(),
-                description: "test counter".into(),
-                parameters: serde_json::json!({"type": "object", "properties": {}}),
-            }
+            ToolSpec::function(
+                "counter",
+                "test counter",
+                serde_json::json!({"type": "object", "properties": {}}),
+            )
         }
 
         async fn call(&self, _args: serde_json::Value) -> Result<ToolResult> {
@@ -296,6 +310,7 @@ mod tests {
         let (tx, mut rx) = mpsc::unbounded_channel();
         let agent = Agent::new(
             Box::new(provider),
+            vec![],
             vec![],
             AgentLoopConfig::default(),
             tx,
@@ -355,6 +370,7 @@ mod tests {
         let agent = Agent::new(
             Box::new(provider),
             tools,
+            vec![],
             AgentLoopConfig::default(),
             tx,
             Arc::new(SessionLog::disabled()),
@@ -385,6 +401,7 @@ mod tests {
         let (tx, _rx) = mpsc::unbounded_channel();
         let agent = Agent::new(
             Box::new(provider),
+            vec![],
             vec![],
             AgentLoopConfig::default(),
             tx,
@@ -428,6 +445,7 @@ mod tests {
         let (tx, mut rx) = mpsc::unbounded_channel();
         let agent = Agent::new(
             Box::new(provider),
+            vec![],
             vec![],
             AgentLoopConfig::default(),
             tx,

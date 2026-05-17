@@ -4,6 +4,7 @@
 # Anthropic / MiniMax-compatible: use full root, e.g.
 #   https://api.anthropic.com
 #   https://api.minimaxi.com/anthropic   (or origin-only https://api.minimaxi.com — ragent appends /anthropic)
+# OpenAI-compatible `api_base`: chat/completions uses streamed SSE—fewer nginx/proxy 504 idle timeouts vs one huge reply.
 model = "gpt-4o"
 provider = "openai"               # "openai" or "anthropic"
 
@@ -26,9 +27,20 @@ enable_note = true
 enable_mcp = false
 # mcp_config_path = "config/mcp.json"
 
+# OpenAI only: native hosted `web_search` on `/v1/responses` (same idea as codex-rs; no local crawler).
+# web_search_mode = "disabled"   # "live" | "cached" | "disabled" — default is disabled
+# Optional: [tools.web_search] for filters and context (see commented block below).
+
 [tools.mcp]
 connect_timeout_secs = 10
 execute_timeout_secs = 60
+
+# [tools.web_search]
+# context_size = "high"
+# allowed_domains = ["docs.rs"]
+#
+# [tools.web_search.location]
+# country = "US"
 
 [skills]
 enabled = false

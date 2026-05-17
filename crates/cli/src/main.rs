@@ -57,7 +57,10 @@ async fn main() -> Result<()> {
         std::env::set_current_dir(dir)?;
     }
 
-    let provider = ragent_llm::create_provider(&config.llm)?;
+    let hosted = config.tools.hosted_web_search_tool_specs();
+
+    let use_native_ws = matches!(config.llm.provider.as_str(), "openai") && !hosted.is_empty();
+    let provider = ragent_llm::create_provider(&config.llm, use_native_ws)?;
     let mut tools = ragent_tools::create_tools(&config.tools);
     if config.tools.enable_mcp {
         match ragent_tools::mcp::load_mcp_tools(&config.tools).await {
@@ -93,8 +96,11 @@ async fn main() -> Result<()> {
         system_prompt = system_prompt.replace("{SKILLS_METADATA}", "");
     }
 
-    let tool_names: Vec<String> = tools.iter().map(|t| t.spec().name).collect();
-    info!(tools = ?tool_names, "tools registered");
+    let tool_names: Vec<String> = tools
+        .iter()
+        .filter_map(|t| t.spec().callable_name().map(ToString::to_string))
+        .collect();
+    info!(tools = ?tool_names, "executable tools registered");
 
     let session_log = Arc::new(SessionLog::from_config(
         config.logging.session_log,
@@ -102,7 +108,14 @@ async fn main() -> Result<()> {
     )?);
 
     let (event_tx, event_rx) = mpsc::unbounded_channel();
-    let agent = Agent::new(provider, tools, config.agent.clone(), event_tx, session_log);
+    let agent = Agent::new(
+        provider,
+        tools,
+        hosted,
+        config.agent.clone(),
+        event_tx,
+        session_log,
+    );
     let mut context = Context::new(system_prompt);
 
     if let Some(prompt) = cli.prompt {

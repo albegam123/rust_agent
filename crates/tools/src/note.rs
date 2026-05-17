@@ -66,12 +66,11 @@ impl NotesStore {
 #[async_trait]
 impl Tool for NoteTool {
     fn spec(&self) -> ToolSpec {
-        ToolSpec {
-            name: "note".into(),
-            description: "Save or recall session notes. Use action 'save' to store a note \
-                          with a key, or 'recall' to retrieve notes matching a query."
-                .into(),
-            parameters: serde_json::json!({
+        ToolSpec::function(
+            "note",
+            "Save or recall session notes. Use action 'save' to store a note \
+             with a key, or 'recall' to retrieve notes matching a query.",
+            serde_json::json!({
                 "type": "object",
                 "properties": {
                     "action": {
@@ -90,7 +89,7 @@ impl Tool for NoteTool {
                 },
                 "required": ["action", "key"]
             }),
-        }
+        )
     }
 
     async fn call(&self, args: serde_json::Value) -> Result<ToolResult> {

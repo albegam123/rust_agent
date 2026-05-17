@@ -38,7 +38,10 @@ mod tests {
     fn create_tools_default_config() {
         let config = ToolsConfig::default();
         let tools = create_tools(&config);
-        let names: Vec<String> = tools.iter().map(|t| t.spec().name).collect();
+        let names: Vec<String> = tools
+            .iter()
+            .filter_map(|t| t.spec().callable_name().map(ToString::to_string))
+            .collect();
         assert!(names.iter().any(|n| n == "read_file"));
         assert!(names.iter().any(|n| n == "write_file"));
         assert!(names.iter().any(|n| n == "edit_file"));
@@ -53,7 +56,10 @@ mod tests {
             ..ToolsConfig::default()
         };
         let tools = create_tools(&config);
-        let names: Vec<String> = tools.iter().map(|t| t.spec().name).collect();
+        let names: Vec<String> = tools
+            .iter()
+            .filter_map(|t| t.spec().callable_name().map(ToString::to_string))
+            .collect();
         assert!(!names.iter().any(|n| n == "bash"));
         assert!(names.iter().any(|n| n == "read_file"));
     }

@@ -9,12 +9,11 @@ pub struct FileEditTool;
 #[async_trait]
 impl Tool for FileEditTool {
     fn spec(&self) -> ToolSpec {
-        ToolSpec {
-            name: "edit_file".into(),
-            description: "Edit a file by replacing an exact string match with new content. \
-                          The old_string must uniquely identify the text to replace."
-                .into(),
-            parameters: serde_json::json!({
+        ToolSpec::function(
+            "edit_file",
+            "Edit a file by replacing an exact string match with new content. \
+             The old_string must uniquely identify the text to replace.",
+            serde_json::json!({
                 "type": "object",
                 "properties": {
                     "path": {
@@ -32,7 +31,7 @@ impl Tool for FileEditTool {
                 },
                 "required": ["path", "old_string", "new_string"]
             }),
-        }
+        )
     }
 
     async fn call(&self, args: serde_json::Value) -> Result<ToolResult> {

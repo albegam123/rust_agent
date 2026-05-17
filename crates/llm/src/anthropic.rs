@@ -144,15 +144,24 @@ impl AnthropicProvider {
             body["system"] = serde_json::Value::String(system.clone());
         }
 
-        if !tools.is_empty() {
-            let tool_schemas: Vec<serde_json::Value> = tools
+        let function_tools: Vec<&ToolSpec> = tools
+            .iter()
+            .filter(|t| matches!(t, ToolSpec::Function { .. }))
+            .collect();
+        if !function_tools.is_empty() {
+            let tool_schemas: Vec<serde_json::Value> = function_tools
                 .iter()
-                .map(|t| {
-                    serde_json::json!({
-                        "name": t.name,
-                        "description": t.description,
-                        "input_schema": t.parameters,
-                    })
+                .filter_map(|t| match t {
+                    ToolSpec::Function {
+                        name,
+                        description,
+                        parameters,
+                    } => Some(serde_json::json!({
+                        "name": name,
+                        "description": description,
+                        "input_schema": parameters,
+                    })),
+                    ToolSpec::WebSearch { .. } => None,
                 })
                 .collect();
             body["tools"] = serde_json::Value::Array(tool_schemas);

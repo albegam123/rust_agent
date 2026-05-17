@@ -84,23 +84,26 @@ impl SessionLog {
         Ok(Some(path))
     }
 
-    pub fn log_request(&self, messages: &[Message], tools: &[ToolSpec]) {
+    pub fn log_request(&self, messages: &[Message], tool_specs: &[ToolSpec]) {
         if !self.enabled {
             return;
         }
         #[derive(Serialize)]
-        struct Req<'a> {
+        struct Req {
             messages: Vec<serde_json::Value>,
-            tools: Vec<&'a str>,
+            tools: Vec<serde_json::Value>,
         }
         let msg_values: Vec<serde_json::Value> = messages
             .iter()
             .filter_map(|m| serde_json::to_value(m).ok())
             .collect();
-        let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+        let tools_serial: Vec<serde_json::Value> = tool_specs
+            .iter()
+            .filter_map(|t| serde_json::to_value(t).ok())
+            .collect();
         let body = Req {
             messages: msg_values,
-            tools: tool_names,
+            tools: tools_serial,
         };
         let json = serde_json::to_string_pretty(&body).unwrap_or_else(|_| "{}".to_string());
         let content = format!("LLM Request:\n\n{json}");

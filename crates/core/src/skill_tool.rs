@@ -22,10 +22,10 @@ impl GetSkillTool {
 #[async_trait]
 impl Tool for GetSkillTool {
     fn spec(&self) -> ToolSpec {
-        ToolSpec {
-            name: "get_skill".into(),
-            description: "Get complete content and guidance for a specified skill, used for executing specific types of tasks".into(),
-            parameters: json!({
+        ToolSpec::function(
+            "get_skill",
+            "Get complete content and guidance for a specified skill, used for executing specific types of tasks",
+            json!({
                 "type": "object",
                 "properties": {
                     "skill_name": {
@@ -35,7 +35,7 @@ impl Tool for GetSkillTool {
                 },
                 "required": ["skill_name"]
             }),
-        }
+        )
     }
 
     async fn call(&self, args: serde_json::Value) -> Result<ToolResult> {

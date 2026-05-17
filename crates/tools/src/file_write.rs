@@ -9,12 +9,11 @@ pub struct FileWriteTool;
 #[async_trait]
 impl Tool for FileWriteTool {
     fn spec(&self) -> ToolSpec {
-        ToolSpec {
-            name: "write_file".into(),
-            description: "Write content to a file, creating it if it doesn't exist \
-                          or overwriting if it does."
-                .into(),
-            parameters: serde_json::json!({
+        ToolSpec::function(
+            "write_file",
+            "Write content to a file, creating it if it doesn't exist \
+             or overwriting if it does.",
+            serde_json::json!({
                 "type": "object",
                 "properties": {
                     "path": {
@@ -28,7 +27,7 @@ impl Tool for FileWriteTool {
                 },
                 "required": ["path", "content"]
             }),
-        }
+        )
     }
 
     async fn call(&self, args: serde_json::Value) -> Result<ToolResult> {

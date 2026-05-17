@@ -9,12 +9,11 @@ pub struct FileReadTool;
 #[async_trait]
 impl Tool for FileReadTool {
     fn spec(&self) -> ToolSpec {
-        ToolSpec {
-            name: "read_file".into(),
-            description: "Read the contents of a file at the given path. \
-                          Use offset and limit to read specific portions of large files."
-                .into(),
-            parameters: serde_json::json!({
+        ToolSpec::function(
+            "read_file",
+            "Read the contents of a file at the given path. \
+             Use offset and limit to read specific portions of large files.",
+            serde_json::json!({
                 "type": "object",
                 "properties": {
                     "path": {
@@ -32,7 +31,7 @@ impl Tool for FileReadTool {
                 },
                 "required": ["path"]
             }),
-        }
+        )
     }
 
     async fn call(&self, args: serde_json::Value) -> Result<ToolResult> {

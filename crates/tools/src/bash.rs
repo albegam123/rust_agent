@@ -34,13 +34,12 @@ impl Default for BashTool {
 #[async_trait]
 impl Tool for BashTool {
     fn spec(&self) -> ToolSpec {
-        ToolSpec {
-            name: "bash".into(),
-            description: "Execute a bash command and return its output. \
-                          Commands run with a timeout. Long-running commands \
-                          will be terminated after the timeout period."
-                .into(),
-            parameters: serde_json::json!({
+        ToolSpec::function(
+            "bash",
+            "Execute a bash command and return its output. \
+             Commands run with a timeout. Long-running commands \
+             will be terminated after the timeout period.",
+            serde_json::json!({
                 "type": "object",
                 "properties": {
                     "command": {
@@ -54,7 +53,7 @@ impl Tool for BashTool {
                 },
                 "required": ["command"]
             }),
-        }
+        )
     }
 
     async fn call(&self, args: serde_json::Value) -> Result<ToolResult> {

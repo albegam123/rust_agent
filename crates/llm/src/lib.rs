@@ -8,9 +8,24 @@ use ragent_types::config::LLMConfig;
 
 /// Factory function to create an LLM provider from config.
 /// Borrowed from zeroclaw: centralized factory pattern.
-pub fn create_provider(config: &LLMConfig) -> Result<Box<dyn LLMProvider>> {
+/// `enable_native_web_search_tools` activates OpenAI Responses (`/v1/responses`) when the tool list
+/// includes hosted `web_search` (Codex-aligned). Ignored unless `provider == "openai"`.
+pub fn create_provider(
+    config: &LLMConfig,
+    enable_native_web_search_tools: bool,
+) -> Result<Box<dyn LLMProvider>> {
     let api_key = resolve_api_key(config)?;
     let api_base = config.api_base.clone();
+
+    let openai_responses_mode =
+        matches!(config.provider.as_str(), "openai") && enable_native_web_search_tools;
+
+    if enable_native_web_search_tools && config.provider.as_str() != "openai" {
+        tracing::warn!(
+            provider = config.provider.as_str(),
+            "`tools.web_search` is implemented via OpenAI `/v1/responses` hosted tools — other providers skip it."
+        );
+    }
 
     match config.provider.as_str() {
         "openai" => Ok(Box::new(openai::OpenAIProvider::new(
@@ -18,6 +33,7 @@ pub fn create_provider(config: &LLMConfig) -> Result<Box<dyn LLMProvider>> {
             api_base,
             config.model.clone(),
             config.retry.clone(),
+            openai_responses_mode,
         ))),
         "anthropic" => Ok(Box::new(anthropic::AnthropicProvider::new(
             api_key,

@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+use crate::tool::{WebSearchContextSize, WebSearchFilters, WebSearchUserLocation};
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
     pub llm: LLMConfig,
@@ -69,6 +71,16 @@ impl Default for AgentLoopConfig {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum WebSearchMode {
+    #[default]
+    Disabled,
+    /// Cached index (`external_web_access = false`).
+    Cached,
+    Live,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ToolsConfig {
@@ -78,6 +90,64 @@ pub struct ToolsConfig {
     pub enable_mcp: bool,
     pub mcp_config_path: Option<PathBuf>,
     pub mcp: McpConfig,
+    /// Mode: use `web_search_mode` in config to avoid clashing with `[tools.web_search]` (options).
+    #[serde(rename = "web_search_mode")]
+    pub web_search_mode: WebSearchMode,
+    #[serde(default)]
+    pub web_search: Option<WebSearchToolOptions>,
+}
+
+/// Optional tuning forwarded to OpenAI Responses `tools[]` (`type = "web_search"`), codex-compatible.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct WebSearchToolOptions {
+    #[serde(rename = "context_size")]
+    pub search_context_size: Option<WebSearchContextSize>,
+    pub allowed_domains: Option<Vec<String>>,
+    pub location: Option<WebSearchUserLocationToml>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebSearchUserLocationToml {
+    pub country: Option<String>,
+    pub region: Option<String>,
+    pub city: Option<String>,
+    pub timezone: Option<String>,
+}
+
+impl ToolsConfig {
+    /// Codex-aligned hosted `web_search` tool specs for `/v1/responses` when using OpenAI.
+    pub fn hosted_web_search_tool_specs(&self) -> Vec<crate::tool::ToolSpec> {
+        let external_web_access = match self.web_search_mode {
+            WebSearchMode::Disabled => return Vec::new(),
+            WebSearchMode::Cached => false,
+            WebSearchMode::Live => true,
+        };
+
+        let filters = self
+            .web_search
+            .as_ref()
+            .and_then(|o| o.allowed_domains.as_ref())
+            .map(|domains| WebSearchFilters {
+                allowed_domains: Some(domains.clone()),
+            });
+
+        let user_location = self.web_search.as_ref().and_then(|o| {
+            o.location.as_ref().map(|loc| WebSearchUserLocation {
+                location_type: crate::tool::WebSearchUserLocationType::Approximate,
+                country: loc.country.clone(),
+                region: loc.region.clone(),
+                city: loc.city.clone(),
+                timezone: loc.timezone.clone(),
+            })
+        });
+
+        vec![crate::tool::ToolSpec::hosted_web_search(
+            external_web_access,
+            self.web_search.as_ref().and_then(|o| o.search_context_size),
+            filters,
+            user_location,
+        )]
+    }
 }
 
 impl Default for ToolsConfig {
@@ -89,6 +159,8 @@ impl Default for ToolsConfig {
             enable_mcp: false,
             mcp_config_path: None,
             mcp: McpConfig::default(),
+            web_search_mode: WebSearchMode::Disabled,
+            web_search: None,
         }
     }
 }
@@ -192,6 +264,51 @@ level = "debug"
         assert_eq!(config.agent.max_steps, 100);
         assert!(!config.tools.enable_bash);
         assert!(config.skills.enabled);
+    }
+
+    #[test]
+    fn tools_web_search_toml_hosts_spec() {
+        let toml_str = r#"
+[tools]
+web_search_mode = "live"
+
+[tools.web_search]
+context_size = "high"
+allowed_domains = ["example.com"]
+
+[tools.web_search.location]
+country = "US"
+city = "New York"
+timezone = "America/New_York"
+
+[llm]
+model = "gpt-5"
+"#;
+        let cfg: AgentConfig = toml::from_str(toml_str).unwrap();
+        let specs = cfg.tools.hosted_web_search_tool_specs();
+        assert_eq!(specs.len(), 1);
+        match &specs[0] {
+            crate::tool::ToolSpec::WebSearch {
+                external_web_access,
+                search_context_size,
+                filters,
+                user_location,
+            } => {
+                assert!(*external_web_access);
+                assert_eq!(
+                    *search_context_size,
+                    Some(crate::tool::WebSearchContextSize::High)
+                );
+                assert_eq!(
+                    filters.as_ref().unwrap().allowed_domains.as_ref().unwrap()[0],
+                    "example.com"
+                );
+                let ul = user_location.as_ref().unwrap();
+                assert_eq!(ul.country.as_deref(), Some("US"));
+                assert_eq!(ul.city.as_deref(), Some("New York"));
+            }
+            _ => panic!("expected WebSearch variant"),
+        }
     }
 
     #[test]
